@@ -2,51 +2,38 @@
 
 ## Current Phase
 
-- Complete
+- Complete: Firebase Authentication & Cloud Firestore Fully Integrated & Verified
 
 ## Current Goal
 
-- Landing page and Authentication build for Booker application
+- Ready for user testing and feature enhancements
 
 ## Completed
 
-- **Landing Page Components**:
-  - `Navbar.tsx`: Logo, navigation links, Sign In / Get Started CTAs, sticky header, mobile drawer menu
-  - `Hero.tsx`: Headline, subtext, main & secondary CTAs, feature badges, dashboard mockup graphic
-  - `ValueProposition.tsx`: Problem statement & bold promise line
-  - `FeatureShowcase.tsx`: Split layout with interactive mockups for Collection Management, Lending Tracker, and Curated Playlists
-  - `HowItWorks.tsx`: 3-step cards ("Add your books", "Track & organize", "Never lose track")
-  - `Differentiators.tsx`: Feature comparison table (Booker vs. Spreadsheet) & key differentiator highlights
-  - `Testimonials.tsx`: 3-column user review grid with category tags & quotes
-  - `Footer.tsx`: Branding, PDF links (`/legal/terms.pdf`, `/legal/privacy.pdf`), Cookies popup, and About Us link
-- **Authentication Flow**:
-  - `sign-in/page.tsx` & `SignInForm.tsx`: Dual entry (Google OAuth & Email/Password), forgot password link, validation
-  - `sign-up/page.tsx` & `SignUpForm.tsx`: Dual entry, email verification step, live password requirements checklist
-  - `reset-password/page.tsx` & `ResetPasswordForm.tsx`: Email request for password reset
-  - `reset-password/confirm/page.tsx` & `ResetPasswordConfirmForm.tsx`: Password reset confirmation with checklist
-  - `GoogleAuthButton.tsx`: Reusable OAuth button using Clerk
-  - `PasswordRequirementsChecklist.tsx`: Live validation checklist for length, uppercase, lowercase, numbers, and special characters
-- **Route Protection & Server Layout**:
-  - `src/proxy.ts`: Middleware routing logic for unauthenticated redirection to `/sign-in` with `redirect` URL parameter and authenticated redirection from auth pages to `/dashboard`
-  - `src/app/(dashboard)/layout.tsx`: Server-side auth guard wrapping dashboard routes
+- **Clerk Authentication Removal**:
+  - Removed all `@clerk/nextjs` references across the codebase
+  - Deleted obsolete files `src/utils/clerk.ts` and `src/components/auth/ClerkProviderWrapper.tsx`
+  - Replaced Clerk middleware with Next.js 16 native `src/proxy.ts` session routing
+  - Removed Clerk CAPTCHA elements and dependencies
+- **Firebase Authentication & Firestore Database**:
+  - Configured live Firebase project `booker-da1c5` in `.env.local`
+  - Created `src/lib/firebase.ts` with offline persistence support (`persistentLocalCache`)
+  - Created `src/context/AuthContext.tsx` providing reactive Auth listener (`onAuthStateChanged`), email/password authentication, Google OAuth popup, password reset, and automatic user profile sync with Firestore `users` collection
+  - Migrated `src/services/db.ts` to Cloud Firestore (`users`, `books`, `read_lists`, `read_list_books`, `invitations`) with offline caching and graceful fallback
+  - Updated `AppLayout.tsx`, `Navbar.tsx`, `SignInForm.tsx`, `SignUpForm.tsx`, `GoogleAuthButton.tsx`, and `ResetPasswordForm.tsx` to use Firebase Auth
+  - Verified clean TypeScript compilation (`npx tsc --noEmit`) and successful Next.js 16 production build (`npm run build`)
+  - Verified local dev server runtime at `http://localhost:3101`
 
 ## In Progress
 
-- Verification & testing completed successfully.
+- Complete
 
 ## Next Up
 
-- Future feature enhancements (e.g. barcode scanning, remote sync, community sharing).
-
-## Open Questions
-
-- None at this time.
+- User testing of Firebase Auth (Email/Password & Google) and Firestore database collections.
 
 ## Architecture Decisions
 
-- Reused existing Booker design tokens (`--color-primary`: `#3B5659`, `--color-secondary`: `#D95B72`, `--color-accent`: `#D9BE36`, Playfair Display for headings, DM Sans for body).
-- Built with Clerk Auth integration (`@clerk/nextjs`), supporting server-side session checks and middleware protection (`proxy.ts`).
-
-## Session Notes
-
-- All pages compile cleanly with Next.js 16 (Turbopack) and TypeScript.
+- Replaced Clerk with Firebase Auth and Cloud Firestore (`booker-da1c5`).
+- Configured Firestore's persistent local cache to guarantee offline-first operation.
+- Protected `/dashboard` using Next.js 16 `src/proxy.ts` and client auth state listeners.

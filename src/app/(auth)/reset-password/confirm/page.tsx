@@ -5,6 +5,8 @@ import Link from 'next/link';
 import ResetPasswordConfirmForm from '../../../../components/auth/ResetPasswordConfirmForm';
 import { BookOpen } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function ResetPasswordConfirmPage() {
   return (
     <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-background px-6 py-12 transition-colors duration-200">

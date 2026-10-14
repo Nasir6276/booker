@@ -1,37 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { AuthenticateWithRedirectCallback } from '@clerk/nextjs';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { isClerkConfigured } from '../../utils/clerk';
-
-function ClerkSSO() {
-  return (
-    <AuthenticateWithRedirectCallback 
-      signInForceRedirectUrl="/dashboard"
-      signUpForceRedirectUrl="/dashboard"
-      signInFallbackRedirectUrl="/dashboard"
-      signUpFallbackRedirectUrl="/dashboard"
-      continueSignUpUrl="/dashboard"
-    />
-  );
-}
 
 export default function SSOCallbackPage() {
   const router = useRouter();
-  const [hasClerk] = useState(() => isClerkConfigured());
 
   useEffect(() => {
-    if (!hasClerk) {
-      router.push('/dashboard');
-    }
-  }, [hasClerk, router]);
+    router.push('/dashboard');
+  }, [router]);
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background text-foreground">
-      <div id="clerk-captcha" />
       <div className="flex flex-col items-center gap-4">
-        {hasClerk ? <ClerkSSO /> : null}
         <h1 className="font-serif text-4xl italic text-primary animate-pulse tracking-wide">
           Booker
         </h1>
@@ -39,7 +20,7 @@ export default function SSOCallbackPage() {
           <div className="h-full w-1/2 bg-primary rounded-full animate-pulse" />
         </div>
         <span className="text-xs text-muted tracking-wider uppercase font-sans mt-2">
-          Completing authentication...
+          Redirecting to collection...
         </span>
       </div>
     </div>

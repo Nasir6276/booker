@@ -2,18 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Menu, X, Moon, Sun, BookOpen } from 'lucide-react';
+import { Menu, X, Moon, Sun, BookOpen, LogOut, LayoutDashboard, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SignInButton, SignUpButton, Show, UserButton } from '@clerk/nextjs';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Navbar() {
+  const { user, signOut } = useAuth();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [scrolled, setScrolled] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Load theme from localStorage or system preference
-    const savedTheme = localStorage.getItem('booker_theme') as 'light' | 'dark';
+    const savedTheme = localStorage.getItem('booker_theme') as 'light' | 'dark' | null;
     if (savedTheme) {
       setTheme(savedTheme);
       document.documentElement.classList.toggle('dark', savedTheme === 'dark');
@@ -35,6 +36,14 @@ export default function Navbar() {
     setTheme(nextTheme);
     localStorage.setItem('booker_theme', nextTheme);
     document.documentElement.classList.toggle('dark', nextTheme === 'dark');
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
   };
 
   return (
@@ -97,23 +106,66 @@ export default function Navbar() {
           </button>
 
           {/* CTAs */}
-          <Show when="signed-out">
-            <Link
-              href="/sign-in"
-              className="text-sm font-semibold text-primary hover:text-primary/80 dark:text-foreground dark:hover:text-foreground/80 px-4 py-2 hover:bg-background/30 rounded-full transition-all"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/sign-up"
-              className="bg-primary hover:bg-primary/95 text-white font-semibold text-sm px-6 py-2.5 rounded-full shadow-sm hover:shadow transition-all"
-            >
-              Get Started
-            </Link>
-          </Show>
-          <Show when="signed-in">
-            <UserButton />
-          </Show>
+          {user ? (
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2.5 py-1.5 px-3 rounded-full border border-border bg-surface hover:bg-background transition-colors text-sm font-medium"
+              >
+                <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center overflow-hidden text-xs">
+                  {user.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
+                  ) : (
+                    user.display_name.charAt(0).toUpperCase()
+                  )}
+                </div>
+                <span className="max-w-[120px] truncate">{user.display_name}</span>
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-surface border border-border rounded-xl shadow-lg py-1.5 z-50">
+                  <div className="px-4 py-2 border-b border-border">
+                    <p className="text-xs font-semibold text-foreground truncate">{user.display_name}</p>
+                    <p className="text-[11px] text-muted truncate">{user.email}</p>
+                  </div>
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-foreground hover:bg-background transition-colors"
+                  >
+                    <LayoutDashboard size={14} className="text-primary" />
+                    Go to Library
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      handleSignOut();
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs font-medium text-secondary hover:bg-background transition-colors text-left"
+                  >
+                    <LogOut size={14} />
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/sign-in"
+                className="text-sm font-semibold text-primary hover:text-primary/80 dark:text-foreground dark:hover:text-foreground/80 px-4 py-2 hover:bg-background/30 rounded-full transition-all"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/sign-up"
+                className="bg-primary hover:bg-primary/95 text-white font-semibold text-sm px-6 py-2.5 rounded-full shadow-sm hover:shadow transition-all"
+              >
+                Get Started
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Mobile Nav Toggle */}
@@ -169,28 +221,50 @@ export default function Navbar() {
                 Reviews
               </Link>
               <div className="flex flex-col gap-2 pt-2">
-                <Show when="signed-out">
-                  <Link
-                    href="/sign-in"
-                    onClick={() => setIsOpen(false)}
-                    className="w-full text-center py-2.5 font-semibold text-primary dark:text-foreground border border-border rounded-full hover:bg-background/30 transition-all block"
-                  >
-                    Sign In
-                  </Link>
-                  <Link
-                    href="/sign-up"
-                    onClick={() => setIsOpen(false)}
-                    className="w-full text-center py-2.5 font-semibold bg-primary text-white rounded-full shadow hover:bg-primary/95 transition-all block"
-                  >
-                    Get Started
-                  </Link>
-                </Show>
-                <Show when="signed-in">
-                  <div className="py-2 flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted">Account</span>
-                    <UserButton />
-                  </div>
-                </Show>
+                {user ? (
+                  <>
+                    <div className="py-2 flex items-center justify-between border-b border-border/50">
+                      <div className="flex items-center gap-2">
+                        <UserIcon size={16} className="text-muted" />
+                        <span className="text-sm font-medium text-foreground truncate">{user.display_name}</span>
+                      </div>
+                      <span className="text-xs text-muted truncate max-w-[140px]">{user.email}</span>
+                    </div>
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full text-center py-2.5 font-semibold bg-primary text-white rounded-full shadow hover:bg-primary/95 transition-all block"
+                    >
+                      Go to Library
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setIsOpen(false);
+                        handleSignOut();
+                      }}
+                      className="w-full text-center py-2 text-sm font-semibold text-secondary hover:underline block"
+                    >
+                      Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/sign-in"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full text-center py-2.5 font-semibold text-primary dark:text-foreground border border-border rounded-full hover:bg-background/30 transition-all block"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/sign-up"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full text-center py-2.5 font-semibold bg-primary text-white rounded-full shadow hover:bg-primary/95 transition-all block"
+                    >
+                      Get Started
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

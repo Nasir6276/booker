@@ -1,94 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { isClerkConfigured } from '../../utils/clerk';
-import { authService } from '../../services/auth';
-import { useBookerStore } from '../../store/useBookerStore';
+import { useAuth } from '../../context/AuthContext';
 
 interface GoogleAuthButtonProps {
-  mode: 'sign-in' | 'sign-up';
-}
-
-function ClerkGoogleButton({ mode }: GoogleAuthButtonProps) {
-  const clerk = useClerk();
-  const [loading, setLoading] = useState(false);
-
-  const handleGoogleAuth = async () => {
-    setLoading(true);
-    try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const redirectUrl = `${origin}/sso-callback`;
-      const redirectUrlComplete = `${origin}/dashboard`;
-
-      // Use signIn.authenticateWithRedirect for Google OAuth.
-      // In Clerk, OAuth sign-in automatically registers new users if they don't exist,
-      // bypassing sign-up bot protection (Cloudflare Turnstile CAPTCHA) loops.
-      await clerk.client.signIn.authenticateWithRedirect({
-        strategy: 'oauth_google',
-        redirectUrl,
-        redirectUrlComplete,
-        continueSignUp: true,
-      });
-    } catch (err) {
-      console.error('Google auth error, trying fallback:', err);
-      try {
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        await clerk.client.signUp.authenticateWithRedirect({
-          strategy: 'oauth_google',
-          redirectUrl: `${origin}/sso-callback`,
-          redirectUrlComplete: `${origin}/dashboard`,
-          continueSignUp: true,
-        });
-      } catch (fallbackErr) {
-        console.error('Fallback Google auth error:', fallbackErr);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleGoogleAuth}
-      disabled={loading}
-      className="w-full border border-border bg-surface hover:bg-background dark:hover:bg-background/40 font-medium py-2.5 rounded-input text-sm flex items-center justify-center gap-2.5 transition-all text-foreground cursor-pointer shadow-sm disabled:opacity-50"
-    >
-      <GoogleIcon />
-      {loading ? 'Connecting...' : 'Continue with Google'}
-    </button>
-  );
-}
-
-function LocalGoogleButton() {
-  const router = useRouter();
-
-  const handleLocalGoogleAuth = async () => {
-    const inputEmail = window.prompt(
-      'Local Auth Mode (No Clerk Keys Detected)\n\nEnter your email address to continue:',
-      'user@gmail.com'
-    );
-
-    if (!inputEmail || !inputEmail.trim()) return;
-
-    const user = await authService.signIn(inputEmail.trim());
-    useBookerStore.setState({ user });
-    document.cookie = `booker_session=${JSON.stringify(user)}; path=/`;
-    router.push('/dashboard');
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleLocalGoogleAuth}
-      className="w-full border border-border bg-surface hover:bg-background dark:hover:bg-background/40 font-medium py-2.5 rounded-input text-sm flex items-center justify-center gap-2.5 transition-all text-foreground cursor-pointer shadow-sm"
-    >
-      <GoogleIcon />
-      Continue with Google
-    </button>
-  );
+  mode?: 'sign-in' | 'sign-up';
 }
 
 function GoogleIcon() {
@@ -114,12 +31,58 @@ function GoogleIcon() {
   );
 }
 
-export default function GoogleAuthButton({ mode }: GoogleAuthButtonProps) {
-  const [hasClerk] = useState(() => isClerkConfigured());
+export default function GoogleAuthButton({ mode = 'sign-in' }: GoogleAuthButtonProps) {
+  const router = useRouter();
+  const { signInWithGoogle } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (hasClerk) {
-    return <ClerkGoogleButton mode={mode} />;
-  }
+  const handleGoogleAuth = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      window.location.href = '/dashboard';
+    } catch (err: unknown) {
+      console.error('Google sign-in error:', err);
+      const code = (err as { code?: string })?.code;
 
-  return <LocalGoogleButton />;
+      if (code === 'auth/popup-closed-by-user') {
+        // User voluntarily dismissed the popup window, don't show an error
+        return;
+      }
+
+      if (code === 'auth/configuration-not-found') {
+        setError('Google sign-in is not enabled in your Firebase Console. Please go to Firebase Console > Authentication > Sign-in method and enable Google.');
+        return;
+      }
+
+      if (code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorized in Firebase. Add localhost to Authorized Domains in Firebase Console > Authentication > Settings.');
+        return;
+      }
+
+      const msg = err instanceof Error ? err.message : 'Google sign-in failed.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <button
+        type="button"
+        onClick={handleGoogleAuth}
+        disabled={loading}
+        className="w-full border border-border bg-surface hover:bg-background dark:hover:bg-background/40 font-medium py-2.5 rounded-input text-sm flex items-center justify-center gap-2.5 transition-all text-foreground cursor-pointer shadow-sm disabled:opacity-50"
+      >
+        <GoogleIcon />
+        {loading ? 'Connecting...' : mode === 'sign-up' ? 'Sign up with Google' : 'Continue with Google'}
+      </button>
+      {error && (
+        <p className="text-xs text-secondary mt-1.5 text-center leading-relaxed font-medium">{error}</p>
+      )}
+    </div>
+  );
 }

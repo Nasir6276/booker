@@ -4,10 +4,9 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useSignIn } from '@clerk/nextjs';
-import { AlertCircle, CheckCircle2, Mail } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Mail, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { isClerkConfigured } from '../../utils/clerk';
+import { useAuth } from '../../context/AuthContext';
 
 const resetSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -15,47 +14,12 @@ const resetSchema = z.object({
 
 type ResetValues = z.infer<typeof resetSchema>;
 
-function ClerkResetRunner({ email, onSuccess, onError }: {
-  email: string;
-  onSuccess: () => void;
-  onError: (err: string) => void;
-}) {
-  const { signIn } = useSignIn();
-
-  React.useEffect(() => {
-    const run = async () => {
-      if (!signIn) return;
-      try {
-        const createRes = await signIn.create({ identifier: email });
-        if (createRes.error) {
-          onError(createRes.error.message || 'Failed to send password reset code.');
-          return;
-        }
-
-        const sendRes = await signIn.resetPasswordEmailCode.sendCode();
-        if (sendRes.error) {
-          onError(sendRes.error.message || 'Failed to send password reset code.');
-          return;
-        }
-
-        onSuccess();
-      } catch (err: any) {
-        onError(err?.message || 'Failed to send password reset code.');
-      }
-    };
-    run();
-  }, [email, signIn, onSuccess, onError]);
-
-  return null;
-}
-
 export default function ResetPasswordForm() {
-  const [hasClerk] = useState(() => isClerkConfigured());
+  const { sendPasswordReset } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState('');
-  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   const {
     register,
@@ -72,14 +36,26 @@ export default function ResetPasswordForm() {
     setError(null);
     setLoading(true);
 
-    if (hasClerk) {
-      setPendingEmail(data.email);
-      return;
-    }
+    try {
+      await sendPasswordReset(data.email);
+      setSubmittedEmail(data.email);
+      setSuccess(true);
+    } catch (err: unknown) {
+      console.error('Password reset error:', err);
+      const code = (err as { code?: string })?.code;
+      let msg = 'Failed to send password reset email. Please try again.';
 
-    setSubmittedEmail(data.email);
-    setSuccess(true);
-    setLoading(false);
+      if (code === 'auth/user-not-found') {
+        msg = 'No account found with this email address.';
+      } else if (code === 'auth/invalid-email') {
+        msg = 'Invalid email address.';
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (success) {
@@ -91,21 +67,21 @@ export default function ResetPasswordForm() {
         <div className="space-y-2">
           <h3 className="font-serif text-xl font-bold text-foreground">Check your inbox</h3>
           <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
-            We sent a password verification code to <span className="font-semibold text-foreground">{submittedEmail}</span>.
+            We sent a password reset link to <span className="font-semibold text-foreground">{submittedEmail}</span>.
           </p>
         </div>
 
         <div className="p-3.5 bg-primary/10 border border-primary/20 text-primary dark:text-accent rounded-input flex items-start gap-2 text-xs font-semibold text-left">
           <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
-          <span>Please use the verification code sent to your email to confirm your new password.</span>
+          <span>Click the link in the email to set a new password. You can then sign in with your new credentials.</span>
         </div>
 
         <div className="pt-2 flex flex-col gap-2">
           <Link
-            href={`/reset-password/confirm?email=${encodeURIComponent(submittedEmail)}`}
-            className="w-full bg-primary hover:bg-primary/95 text-white font-semibold py-2.5 rounded-input text-center block shadow-sm font-medium"
+            href="/sign-in"
+            className="w-full bg-primary hover:bg-primary/95 text-white font-semibold py-2.5 rounded-input text-center block shadow-sm"
           >
-            Enter Verification Code
+            Return to Sign In
           </Link>
           <button
             type="button"
@@ -121,23 +97,6 @@ export default function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 font-sans text-sm">
-      {hasClerk && pendingEmail && (
-        <ClerkResetRunner
-          email={pendingEmail}
-          onSuccess={() => {
-            setSubmittedEmail(pendingEmail);
-            setSuccess(true);
-            setLoading(false);
-            setPendingEmail(null);
-          }}
-          onError={(msg) => {
-            setError(msg);
-            setLoading(false);
-            setPendingEmail(null);
-          }}
-        />
-      )}
-
       {error && (
         <div className="p-3 bg-secondary/10 border border-secondary/20 rounded-input text-secondary flex items-start gap-2 text-xs font-semibold">
           <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -170,8 +129,18 @@ export default function ResetPasswordForm() {
         disabled={loading}
         className="w-full bg-primary hover:bg-primary/95 disabled:bg-primary/50 text-white font-semibold py-2.5 rounded-input transition-colors mt-2 shadow-sm cursor-pointer"
       >
-        {loading ? 'Sending Code...' : 'Send Verification Code'}
+        {loading ? 'Sending Link...' : 'Send Password Reset Link'}
       </button>
+
+      <div className="pt-2 text-center">
+        <Link
+          href="/sign-in"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground transition-colors"
+        >
+          <ArrowLeft size={14} />
+          Back to sign in
+        </Link>
+      </div>
     </form>
   );
 }

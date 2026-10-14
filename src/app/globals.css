@@ -1,6 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
 
 :root {
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
   --background: #f2f2f2;
   --foreground: #1b2627;
   --surface: #ffffff;
@@ -35,8 +39,8 @@
   --color-muted: var(--muted);
   --color-border: var(--border);
 
-  --font-serif: var(--font-serif), Georgia, serif;
-  --font-sans: var(--font-sans), sans-serif;
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
   
   --radius-card: var(--radius-card);
   --radius-input: var(--radius-input);
@@ -64,4 +68,3 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
 }
-

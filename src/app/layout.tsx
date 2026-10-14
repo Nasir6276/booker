@@ -1,17 +1,6 @@
 import type { Metadata } from "next";
-import { Playfair_Display, DM_Sans } from "next/font/google";
-import { ClerkProviderWrapper } from "../components/auth/ClerkProviderWrapper";
+import { AuthProvider } from "../context/AuthContext";
 import "./globals.css";
-
-const playfair = Playfair_Display({
-  variable: "--font-serif",
-  subsets: ["latin"],
-});
-
-const dmSans = DM_Sans({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Booker — Personal Book Inventory",
@@ -24,14 +13,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${playfair.variable} ${dmSans.variable} h-full antialiased`}
-    >
+    <html lang="en" className="h-full antialiased">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body className="min-h-full flex flex-col">
-        <ClerkProviderWrapper>
+        <AuthProvider>
           {children}
-        </ClerkProviderWrapper>
+        </AuthProvider>
       </body>
     </html>
   );

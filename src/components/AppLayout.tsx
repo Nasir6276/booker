@@ -18,85 +18,23 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import ProfileModal from './ProfileModal';
 import { useRouter } from 'next/navigation';
-import { useUser, useClerk } from '@clerk/nextjs';
-import { authService } from '../services/auth';
-import { isClerkConfigured } from '../utils/clerk';
-
-function ClerkSync({ onSynced }: { onSynced: () => void }) {
-  const { user: clerkUser, isLoaded: clerkLoaded, isSignedIn } = useUser();
-  const syncedRef = React.useRef(false);
-
-  useEffect(() => {
-    if (!clerkLoaded || syncedRef.current) return;
-
-    const syncUser = async () => {
-      syncedRef.current = true;
-      if (isSignedIn && clerkUser) {
-        const formattedUser = {
-          id: clerkUser.id,
-          email: clerkUser.primaryEmailAddress?.emailAddress || '',
-          display_name: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress.split('@')[0] || 'Reader',
-          avatar_url: clerkUser.imageUrl,
-          invite_code: clerkUser.id.substring(0, 8).toUpperCase(),
-          is_public: false,
-          created_at: clerkUser.createdAt ? clerkUser.createdAt.toISOString() : new Date().toISOString()
-        };
-
-        await authService.initDemoData(clerkUser.id);
-        useBookerStore.setState({ user: formattedUser, loading: false });
-
-        const store = useBookerStore.getState();
-        await store.fetchBooks();
-        await store.fetchReadLists();
-      } else {
-        useBookerStore.setState({ user: null, loading: false });
-      }
-      onSynced();
-    };
-
-    syncUser();
-  }, [clerkLoaded, isSignedIn, clerkUser, onSynced]);
-
-  return null;
-}
-
-function LocalSync({ onSynced }: { onSynced: () => void }) {
-  const syncedRef = React.useRef(false);
-
-  useEffect(() => {
-    if (syncedRef.current) return;
-    syncedRef.current = true;
-
-    const syncLocal = async () => {
-      const store = useBookerStore.getState();
-      await store.init();
-      onSynced();
-    };
-    syncLocal();
-  }, [onSynced]);
-
-  return null;
-}
+import { useAuth } from '../context/AuthContext';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { user: authUser, loading: authLoading, signOut } = useAuth();
   const { 
-    user, 
-    loading, 
+    user: storeUser, 
     activeTab, 
     setActiveTab, 
     isOffline 
   } = useBookerStore();
 
-  const [hasClerk] = useState(() => isClerkConfigured());
+  const user = storeUser || authUser;
+
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [synced, setSynced] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-
-  const handleSynced = React.useCallback(() => {
-    setSynced(true);
-  }, []);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('booker_theme') as 'light' | 'dark';
@@ -120,10 +58,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (synced && !loading && !user) {
+    if (!authLoading && !user) {
       router.push('/sign-in');
     }
-  }, [synced, loading, user, router]);
+  }, [authLoading, user, router]);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
@@ -132,25 +70,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     document.documentElement.classList.toggle('dark', nextTheme === 'dark');
   };
 
-  const clerk = useClerk();
-
   const handleSignOut = async () => {
     try {
-      if (hasClerk && clerk) {
-        await clerk.signOut();
-      }
+      await signOut();
     } catch (err) {
-      console.error('Clerk sign out error:', err);
+      console.error('Sign out error:', err);
     }
-    await useBookerStore.getState().signOut();
-    document.cookie = 'booker_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     window.location.href = '/sign-in';
   };
 
-  if (!synced || loading) {
+  if (authLoading || !user) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background text-foreground">
-        <ClerkSync onSynced={handleSynced} />
         <div className="flex flex-col items-center gap-4">
           <h1 className="font-serif text-4xl italic text-primary animate-pulse tracking-wide">Booker</h1>
           <div className="h-1 w-24 bg-border overflow-hidden rounded-full">
@@ -169,10 +100,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         `}</style>
       </div>
     );
-  }
-
-  if (!user) {
-    return null;
   }
 
   const navItems = [
@@ -310,7 +237,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center justify-between px-2 pt-2 text-xs">
             <button 
-              onClick={toggleTheme}
+              onClick={toggleTheme} 
               className="flex items-center gap-1.5 py-1 px-2.5 rounded-full border border-border hover:bg-background text-muted hover:text-foreground transition-colors"
             >
               {theme === 'light' ? (

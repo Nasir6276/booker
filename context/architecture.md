@@ -2,41 +2,41 @@
 
 ## Stack
 
-| Layer     | Technology                  | Role   |
-| --------- | --------------------------- | ------ |
-| Framework | [e.g. Next.js + TypeScript] | [Role] |
-| UI        | [e.g. Tailwind + shadcn/ui] | [Role] |
-| Auth      | [e.g. Clerk]                | [Role] |
-| Database  | [e.g. Prisma + PostgreSQL]  | [Role] |
-| [Layer]   | [Technology]                | [Role] |
+| Layer     | Technology                       | Role                                              |
+| --------- | -------------------------------- | ------------------------------------------------- |
+| Framework | Next.js 16 (App Router) + TS     | Application framework, SSR, routing & proxying   |
+| UI        | Tailwind CSS v4 + Framer Motion  | Styling, design system tokens, animations         |
+| Auth      | Firebase Authentication          | Email/Password, Google OAuth, session management  |
+| Database  | Cloud Firestore (Firebase v13)   | Users, books, reading lists, with offline cache   |
+| State     | Zustand                          | Global client application state & reactivity      |
 
 ## System Boundaries
 
-- `[folder]` — [What this folder owns and is responsible for]
-- `[folder]` — [What this folder owns and is responsible for]
-- `[folder]` — [What this folder owns and is responsible for]
-- `[folder]` — [What this folder owns and is responsible for]
+- `src/lib/firebase.ts` — Firebase client initialization, Auth, Firestore persistent offline cache configuration.
+- `src/context/AuthContext.tsx` — Reactive authentication provider, user profile synchronization to Firestore, sign in/up/out actions.
+- `src/services/db.ts` — Cloud Firestore data access service with offline persistence and graceful local IndexedDB fallback.
+- `src/services/auth.ts` — Local fallback and demo data seeder.
+- `src/store/useBookerStore.ts` — Booker UI state, filtering, books & lists state cache.
+- `src/proxy.ts` — Next.js 16 request proxy protecting `/dashboard` and routing authenticated users.
 
 ## Storage Model
 
-- **[Storage type e.g. Database]**: [What lives here —
-  e.g. metadata, ownership, relationships]
-- **[Storage type e.g. Blob/File Storage]**: [What lives
-  here — e.g. generated files, media, large artifacts]
+- **Cloud Firestore**:
+  - `users`: User profiles, display name, avatar, invite code, public flag.
+  - `books`: Personal book inventory records, ownership type, lending metadata, soft deletion timestamps.
+  - `read_lists`: Reading lists created by users with color tokens.
+  - `read_list_books`: Link records connecting books to specific reading lists.
+  - `invitations`: Invitation tokens, status (`pending`, `accepted`, `expired`), expires_at.
 
 ## Auth and Access Model
 
-- [How authentication works — e.g. Every user signs in
-  via Clerk]
-- [How ownership works — e.g. Every project has a single
-  owner]
-- [How access control works — e.g. Only the owner or a
-  collaborator can mutate project resources]
+- Authentication is managed via Firebase Auth supporting Email/Password and Google Sign-In.
+- Upon first sign-in (Email or Google), a user document is created in the `users` collection with an automated invite code.
+- Route protection is managed via `src/proxy.ts` using secure session cookies and client-side guards in `AppLayout.tsx`.
 
 ## Invariants
 
-1. [Rule the codebase must never violate — e.g. Request
-   handlers do not run long-lived background work]
-2. [Invariant two]
-3. [Invariant three]
-4. [Invariant four]
+1. Clerk authentication dependencies are strictly excluded from the codebase.
+2. Firebase initialization handles build-time prerendering without failing on unconfigured keys.
+3. Offline capabilities are preserved across all book management operations through Firestore's persistent local cache.
+4. `npm run build` passes before any phase is considered complete.
