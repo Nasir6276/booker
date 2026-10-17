@@ -12,7 +12,7 @@ import {
   deleteField,
   QueryDocumentSnapshot
 } from 'firebase/firestore';
-import { db as firestoreDb, isFirebaseConfigured } from '../lib/firebase';
+import { auth, db as firestoreDb, isFirebaseConfigured } from '../lib/firebase';
 import { Book, ReadList, ReadListBook, Invitation, User } from '../types';
 
 const DB_NAME = 'booker_db';
@@ -58,6 +58,10 @@ function getLocalDB(): Promise<IDBPDatabase> | null {
   return dbPromise;
 }
 
+function shouldUseFirestore(): boolean {
+  return isFirebaseConfigured() && typeof window !== 'undefined' && Boolean(auth.currentUser);
+}
+
 // Helper to check and cleanup expired soft-deleted books (older than 30 days) in local IndexedDB
 async function cleanExpiredSoftDeletesLocal(db: IDBPDatabase) {
   const tx = db.transaction('books', 'readwrite');
@@ -82,10 +86,14 @@ async function cleanExpiredSoftDeletesLocal(db: IDBPDatabase) {
 export const dbService = {
   // --- USER OPERATIONS ---
   async saveUser(user: User): Promise<User> {
-    if (isFirebaseConfigured()) {
-      const userRef = doc(firestoreDb, 'users', user.id);
-      await setDoc(userRef, user, { merge: true });
-      return user;
+    if (shouldUseFirestore()) {
+      try {
+        const userRef = doc(firestoreDb, 'users', user.id);
+        await setDoc(userRef, user, { merge: true });
+        return user;
+      } catch (err) {
+        console.warn('Firestore saveUser error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -95,13 +103,16 @@ export const dbService = {
   },
 
   async getUser(id: string): Promise<User | null> {
-    if (isFirebaseConfigured()) {
-      const userRef = doc(firestoreDb, 'users', id);
-      const snap = await getDoc(userRef);
-      if (snap.exists()) {
-        return snap.data() as User;
+    if (shouldUseFirestore()) {
+      try {
+        const userRef = doc(firestoreDb, 'users', id);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          return snap.data() as User;
+        }
+      } catch (err) {
+        console.warn('Firestore getUser error, falling back to local DB:', err);
       }
-      return null;
     }
 
     const localDb = await getLocalDB();
@@ -111,13 +122,17 @@ export const dbService = {
 
   async getUserByEmail(email: string): Promise<User | null> {
     const normalized = email.toLowerCase().trim();
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'users'), where('email', '==', normalized));
-      const querySnap = await getDocs(q);
-      if (!querySnap.empty) {
-        return querySnap.docs[0].data() as User;
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'users'), where('email', '==', normalized));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          return querySnap.docs[0].data() as User;
+        }
+        return null;
+      } catch (err) {
+        console.warn('Firestore getUserByEmail error, falling back to local DB:', err);
       }
-      return null;
     }
 
     const localDb = await getLocalDB();
@@ -132,13 +147,17 @@ export const dbService = {
 
   async getUserByInviteCode(inviteCode: string): Promise<User | null> {
     const cleanCode = inviteCode.trim().toUpperCase();
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'users'), where('invite_code', '==', cleanCode));
-      const querySnap = await getDocs(q);
-      if (!querySnap.empty) {
-        return querySnap.docs[0].data() as User;
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'users'), where('invite_code', '==', cleanCode));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          return querySnap.docs[0].data() as User;
+        }
+        return null;
+      } catch (err) {
+        console.warn('Firestore getUserByInviteCode error, falling back to local DB:', err);
       }
-      return null;
     }
 
     const localDb = await getLocalDB();
@@ -153,29 +172,33 @@ export const dbService = {
 
   // --- BOOK OPERATIONS ---
   async getBooks(userId: string, includeDeleted = false): Promise<Book[]> {
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'books'), where('user_id', '==', userId));
-      const snap = await getDocs(q);
-      const now = new Date();
-      const books: Book[] = [];
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'books'), where('user_id', '==', userId));
+        const snap = await getDocs(q);
+        const now = new Date();
+        const books: Book[] = [];
 
-      for (const d of snap.docs) {
-        const book = d.data() as Book;
-        if (book.is_deleted && book.deleted_at) {
-          const deletedDate = new Date(book.deleted_at);
-          const diffDays = Math.ceil(Math.abs(now.getTime() - deletedDate.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays > 30) {
-            // Clean up expired soft-deleted book in background
-            deleteDoc(doc(firestoreDb, 'books', book.id)).catch(() => {});
-            continue;
+        for (const d of snap.docs) {
+          const book = d.data() as Book;
+          if (book.is_deleted && book.deleted_at) {
+            const deletedDate = new Date(book.deleted_at);
+            const diffDays = Math.ceil(Math.abs(now.getTime() - deletedDate.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays > 30) {
+              // Clean up expired soft-deleted book in background
+              deleteDoc(doc(firestoreDb, 'books', book.id)).catch(() => {});
+              continue;
+            }
+          }
+
+          if (includeDeleted || !book.is_deleted) {
+            books.push(book);
           }
         }
-
-        if (includeDeleted || !book.is_deleted) {
-          books.push(book);
-        }
+        return books;
+      } catch (err) {
+        console.warn('Firestore getBooks error, falling back to local DB:', err);
       }
-      return books;
     }
 
     const localDb = await getLocalDB();
@@ -195,9 +218,15 @@ export const dbService = {
   },
 
   async getBook(id: string): Promise<Book | null> {
-    if (isFirebaseConfigured()) {
-      const snap = await getDoc(doc(firestoreDb, 'books', id));
-      return snap.exists() ? (snap.data() as Book) : null;
+    if (shouldUseFirestore()) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'books', id));
+        if (snap.exists()) {
+          return snap.data() as Book;
+        }
+      } catch (err) {
+        console.warn('Firestore getBook error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -215,9 +244,13 @@ export const dbService = {
       updated_at: new Date().toISOString()
     };
 
-    if (isFirebaseConfigured()) {
-      await setDoc(doc(firestoreDb, 'books', id), newBook);
-      return newBook;
+    if (shouldUseFirestore()) {
+      try {
+        await setDoc(doc(firestoreDb, 'books', id), newBook);
+        return newBook;
+      } catch (err) {
+        console.warn('Firestore addBook error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -236,9 +269,13 @@ export const dbService = {
       updated_at: new Date().toISOString()
     };
 
-    if (isFirebaseConfigured()) {
-      await setDoc(doc(firestoreDb, 'books', id), updatedBook, { merge: true });
-      return updatedBook;
+    if (shouldUseFirestore()) {
+      try {
+        await setDoc(doc(firestoreDb, 'books', id), updatedBook, { merge: true });
+        return updatedBook;
+      } catch (err) {
+        console.warn('Firestore updateBook error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -255,13 +292,17 @@ export const dbService = {
   },
 
   async restoreBook(id: string): Promise<void> {
-    if (isFirebaseConfigured()) {
-      await updateDoc(doc(firestoreDb, 'books', id), {
-        is_deleted: false,
-        deleted_at: deleteField(),
-        updated_at: new Date().toISOString()
-      });
-      return;
+    if (shouldUseFirestore()) {
+      try {
+        await updateDoc(doc(firestoreDb, 'books', id), {
+          is_deleted: false,
+          deleted_at: deleteField(),
+          updated_at: new Date().toISOString()
+        });
+        return;
+      } catch (err) {
+        console.warn('Firestore restoreBook error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -279,14 +320,18 @@ export const dbService = {
   },
 
   async permanentlyDeleteBook(id: string): Promise<void> {
-    if (isFirebaseConfigured()) {
-      await deleteDoc(doc(firestoreDb, 'books', id));
-      const q = query(collection(firestoreDb, 'read_list_books'), where('book_id', '==', id));
-      const snap = await getDocs(q);
-      for (const d of snap.docs) {
-        await deleteDoc(d.ref);
+    if (shouldUseFirestore()) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'books', id));
+        const q = query(collection(firestoreDb, 'read_list_books'), where('book_id', '==', id));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          await deleteDoc(d.ref);
+        }
+        return;
+      } catch (err) {
+        console.warn('Firestore permanentlyDeleteBook error, falling back to local DB:', err);
       }
-      return;
     }
 
     const localDb = await getLocalDB();
@@ -307,10 +352,14 @@ export const dbService = {
 
   // --- READING LIST OPERATIONS ---
   async getReadLists(userId: string): Promise<ReadList[]> {
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'read_lists'), where('user_id', '==', userId));
-      const snap = await getDocs(q);
-      return snap.docs.map((d: QueryDocumentSnapshot) => d.data() as ReadList);
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'read_lists'), where('user_id', '==', userId));
+        const snap = await getDocs(q);
+        return snap.docs.map((d: QueryDocumentSnapshot) => d.data() as ReadList);
+      } catch (err) {
+        console.warn('Firestore getReadLists error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -334,9 +383,13 @@ export const dbService = {
       created_at: new Date().toISOString()
     };
 
-    if (isFirebaseConfigured()) {
-      await setDoc(doc(firestoreDb, 'read_lists', id), newList);
-      return newList;
+    if (shouldUseFirestore()) {
+      try {
+        await setDoc(doc(firestoreDb, 'read_lists', id), newList);
+        return newList;
+      } catch (err) {
+        console.warn('Firestore createReadList error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -346,14 +399,18 @@ export const dbService = {
   },
 
   async deleteReadList(id: string): Promise<void> {
-    if (isFirebaseConfigured()) {
-      await deleteDoc(doc(firestoreDb, 'read_lists', id));
-      const q = query(collection(firestoreDb, 'read_list_books'), where('list_id', '==', id));
-      const snap = await getDocs(q);
-      for (const d of snap.docs) {
-        await deleteDoc(d.ref);
+    if (shouldUseFirestore()) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'read_lists', id));
+        const q = query(collection(firestoreDb, 'read_list_books'), where('list_id', '==', id));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          await deleteDoc(d.ref);
+        }
+        return;
+      } catch (err) {
+        console.warn('Firestore deleteReadList error, falling back to local DB:', err);
       }
-      return;
     }
 
     const localDb = await getLocalDB();
@@ -380,9 +437,13 @@ export const dbService = {
       added_at: new Date().toISOString()
     };
 
-    if (isFirebaseConfigured()) {
-      await setDoc(doc(firestoreDb, 'read_list_books', id), newLink);
-      return;
+    if (shouldUseFirestore()) {
+      try {
+        await setDoc(doc(firestoreDb, 'read_list_books', id), newLink);
+        return;
+      } catch (err) {
+        console.warn('Firestore addBookToReadList error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -392,9 +453,13 @@ export const dbService = {
 
   async removeBookFromReadList(bookId: string, listId: string): Promise<void> {
     const id = `${listId}_${bookId}`;
-    if (isFirebaseConfigured()) {
-      await deleteDoc(doc(firestoreDb, 'read_list_books', id));
-      return;
+    if (shouldUseFirestore()) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'read_list_books', id));
+        return;
+      } catch (err) {
+        console.warn('Firestore removeBookFromReadList error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -403,22 +468,26 @@ export const dbService = {
   },
 
   async getBooksInReadList(listId: string): Promise<Book[]> {
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'read_list_books'), where('list_id', '==', listId));
-      const snap = await getDocs(q);
-      const books: Book[] = [];
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'read_list_books'), where('list_id', '==', listId));
+        const snap = await getDocs(q);
+        const books: Book[] = [];
 
-      for (const d of snap.docs) {
-        const link = d.data() as ReadListBook;
-        const bookSnap = await getDoc(doc(firestoreDb, 'books', link.book_id));
-        if (bookSnap.exists()) {
-          const book = bookSnap.data() as Book;
-          if (!book.is_deleted) {
-            books.push(book);
+        for (const d of snap.docs) {
+          const link = d.data() as ReadListBook;
+          const bookSnap = await getDoc(doc(firestoreDb, 'books', link.book_id));
+          if (bookSnap.exists()) {
+            const book = bookSnap.data() as Book;
+            if (!book.is_deleted) {
+              books.push(book);
+            }
           }
         }
+        return books;
+      } catch (err) {
+        console.warn('Firestore getBooksInReadList error, falling back to local DB:', err);
       }
-      return books;
     }
 
     const localDb = await getLocalDB();
@@ -443,19 +512,23 @@ export const dbService = {
   },
 
   async getReadListsForBook(bookId: string): Promise<ReadList[]> {
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'read_list_books'), where('book_id', '==', bookId));
-      const snap = await getDocs(q);
-      const lists: ReadList[] = [];
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'read_list_books'), where('book_id', '==', bookId));
+        const snap = await getDocs(q);
+        const lists: ReadList[] = [];
 
-      for (const d of snap.docs) {
-        const link = d.data() as ReadListBook;
-        const listSnap = await getDoc(doc(firestoreDb, 'read_lists', link.list_id));
-        if (listSnap.exists()) {
-          lists.push(listSnap.data() as ReadList);
+        for (const d of snap.docs) {
+          const link = d.data() as ReadListBook;
+          const listSnap = await getDoc(doc(firestoreDb, 'read_lists', link.list_id));
+          if (listSnap.exists()) {
+            lists.push(listSnap.data() as ReadList);
+          }
         }
+        return lists;
+      } catch (err) {
+        console.warn('Firestore getReadListsForBook error, falling back to local DB:', err);
       }
-      return lists;
     }
 
     const localDb = await getLocalDB();
@@ -481,10 +554,14 @@ export const dbService = {
 
   // --- INVITATION OPERATIONS ---
   async getInvitations(userId: string): Promise<Invitation[]> {
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'invitations'), where('inviter_id', '==', userId));
-      const snap = await getDocs(q);
-      return snap.docs.map((d: QueryDocumentSnapshot) => d.data() as Invitation);
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'invitations'), where('inviter_id', '==', userId));
+        const snap = await getDocs(q);
+        return snap.docs.map((d: QueryDocumentSnapshot) => d.data() as Invitation);
+      } catch (err) {
+        console.warn('Firestore getInvitations error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -510,9 +587,13 @@ export const dbService = {
       created_at: new Date().toISOString()
     };
 
-    if (isFirebaseConfigured()) {
-      await setDoc(doc(firestoreDb, 'invitations', id), newInv);
-      return newInv;
+    if (shouldUseFirestore()) {
+      try {
+        await setDoc(doc(firestoreDb, 'invitations', id), newInv);
+        return newInv;
+      } catch (err) {
+        console.warn('Firestore createInvitation error, falling back to local DB:', err);
+      }
     }
 
     const localDb = await getLocalDB();
@@ -522,13 +603,17 @@ export const dbService = {
   },
 
   async getInvitationByToken(token: string): Promise<Invitation | null> {
-    if (isFirebaseConfigured()) {
-      const q = query(collection(firestoreDb, 'invitations'), where('token', '==', token));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        return snap.docs[0].data() as Invitation;
+    if (shouldUseFirestore()) {
+      try {
+        const q = query(collection(firestoreDb, 'invitations'), where('token', '==', token));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          return snap.docs[0].data() as Invitation;
+        }
+        return null;
+      } catch (err) {
+        console.warn('Firestore getInvitationByToken error, falling back to local DB:', err);
       }
-      return null;
     }
 
     const localDb = await getLocalDB();
@@ -547,8 +632,14 @@ export const dbService = {
     if (!inv) throw new Error('Invitation not found');
     if (inv.status !== 'pending') throw new Error('Invitation already processed');
     if (new Date(inv.expires_at) < new Date()) {
-      if (isFirebaseConfigured()) {
-        await updateDoc(doc(firestoreDb, 'invitations', inv.id), { status: 'expired' });
+      if (shouldUseFirestore()) {
+        try {
+          await updateDoc(doc(firestoreDb, 'invitations', inv.id), { status: 'expired' });
+        } catch (err) {
+          console.warn('Firestore acceptInvitation error, falling back to local DB:', err);
+          const localDb = await getLocalDB();
+          if (localDb) await localDb.put('invitations', { ...inv, status: 'expired' });
+        }
       } else {
         const localDb = await getLocalDB();
         if (localDb) await localDb.put('invitations', { ...inv, status: 'expired' });
@@ -557,8 +648,14 @@ export const dbService = {
     }
     
     const updatedInv: Invitation = { ...inv, status: 'accepted' };
-    if (isFirebaseConfigured()) {
-      await updateDoc(doc(firestoreDb, 'invitations', inv.id), { status: 'accepted' });
+    if (shouldUseFirestore()) {
+      try {
+        await updateDoc(doc(firestoreDb, 'invitations', inv.id), { status: 'accepted' });
+      } catch (err) {
+        console.warn('Firestore acceptInvitation error, falling back to local DB:', err);
+        const localDb = await getLocalDB();
+        if (localDb) await localDb.put('invitations', updatedInv);
+      }
     } else {
       const localDb = await getLocalDB();
       if (localDb) await localDb.put('invitations', updatedInv);

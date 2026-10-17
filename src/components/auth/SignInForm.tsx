@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import GoogleAuthButton from './GoogleAuthButton';
 
@@ -19,9 +19,10 @@ type SignInValues = z.infer<typeof signInSchema>;
 
 export default function SignInForm() {
   const router = useRouter();
-  const { signInWithEmail } = useAuth();
+  const { signInWithEmail, signInAsDemo } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   const {
     register,
@@ -51,12 +52,28 @@ export default function SignInForm() {
         msg = 'Invalid email or password.';
       } else if (code === 'auth/too-many-requests') {
         msg = 'Too many attempts. Please wait a few moments and try again.';
+      } else if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {
+        msg = 'Firebase Authentication is not yet enabled in the Firebase Console (Authentication > Sign-in method). Enable Email/Password or click "Explore Demo Collection" below.';
       } else if (err instanceof Error) {
         msg = err.message;
       }
       setError(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDemoMode = async () => {
+    setError(null);
+    setDemoLoading(true);
+    try {
+      await signInAsDemo();
+      window.location.href = '/dashboard';
+    } catch (err) {
+      console.error('Demo sign in error:', err);
+      setError('Failed to launch demo mode.');
+    } finally {
+      setDemoLoading(false);
     }
   };
 
@@ -128,12 +145,24 @@ export default function SignInForm() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || demoLoading}
           className="w-full bg-primary hover:bg-primary/95 disabled:bg-primary/50 text-white font-semibold py-2.5 rounded-input transition-colors mt-2 shadow-sm cursor-pointer"
         >
           {loading ? 'Signing In...' : 'Sign In'}
         </button>
       </form>
+
+      <div className="pt-2 border-t border-border/60">
+        <button
+          type="button"
+          onClick={handleDemoMode}
+          disabled={loading || demoLoading}
+          className="w-full py-2.5 px-4 rounded-full border border-primary/25 hover:border-primary text-primary dark:text-accent dark:border-accent/30 dark:hover:border-accent bg-primary/5 hover:bg-primary/10 dark:bg-accent/5 dark:hover:bg-accent/10 transition-all text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+        >
+          <Sparkles size={14} className="text-accent" />
+          <span>{demoLoading ? 'Loading Demo Collection...' : 'Explore Demo Collection (Offline-Ready)'}</span>
+        </button>
+      </div>
     </div>
   );
 }

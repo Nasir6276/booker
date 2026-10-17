@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
 import PasswordRequirementsChecklist from './PasswordRequirementsChecklist';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import GoogleAuthButton from './GoogleAuthButton';
 
@@ -32,9 +32,10 @@ type SignUpValues = z.infer<typeof signUpSchema>;
 
 export default function SignUpForm() {
   const router = useRouter();
-  const { signUpWithEmail } = useAuth();
+  const { signUpWithEmail, signInAsDemo } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   const {
     register,
@@ -72,12 +73,28 @@ export default function SignUpForm() {
         msg = 'Password is too weak. Please use a stronger password.';
       } else if (code === 'auth/invalid-email') {
         msg = 'The email address is invalid.';
+      } else if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {
+        msg = 'Email/Password authentication is not yet enabled in the Firebase Console (Authentication > Sign-in method). Enable it there, or click "Explore Demo Collection" below.';
       } else if (err instanceof Error) {
         msg = err.message;
       }
       setError(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDemoMode = async () => {
+    setError(null);
+    setDemoLoading(true);
+    try {
+      await signInAsDemo();
+      window.location.href = '/dashboard';
+    } catch (err) {
+      console.error('Demo sign in error:', err);
+      setError('Failed to launch demo mode.');
+    } finally {
+      setDemoLoading(false);
     }
   };
 
@@ -183,12 +200,24 @@ export default function SignUpForm() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || demoLoading}
           className="w-full bg-primary hover:bg-primary/95 disabled:bg-primary/50 text-white font-semibold py-2.5 rounded-input transition-colors mt-2 shadow-sm cursor-pointer"
         >
           {loading ? 'Creating Account...' : 'Sign Up'}
         </button>
       </form>
+
+      <div className="pt-2 border-t border-border/60">
+        <button
+          type="button"
+          onClick={handleDemoMode}
+          disabled={loading || demoLoading}
+          className="w-full py-2.5 px-4 rounded-full border border-primary/25 hover:border-primary text-primary dark:text-accent dark:border-accent/30 dark:hover:border-accent bg-primary/5 hover:bg-primary/10 dark:bg-accent/5 dark:hover:bg-accent/10 transition-all text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+        >
+          <Sparkles size={14} className="text-accent" />
+          <span>{demoLoading ? 'Loading Demo Collection...' : 'Explore Demo Collection (Offline-Ready)'}</span>
+        </button>
+      </div>
     </div>
   );
 }

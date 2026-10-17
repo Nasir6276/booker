@@ -19,10 +19,10 @@
   - Configured live Firebase project `booker-da1c5` in `.env.local`
   - Created `src/lib/firebase.ts` with offline persistence support (`persistentLocalCache`)
   - Created `src/context/AuthContext.tsx` providing reactive Auth listener (`onAuthStateChanged`), email/password authentication, Google OAuth popup, password reset, and automatic user profile sync with Firestore `users` collection
-  - Migrated `src/services/db.ts` to Cloud Firestore (`users`, `books`, `read_lists`, `read_list_books`, `invitations`) with offline caching and graceful fallback
-  - Updated `AppLayout.tsx`, `Navbar.tsx`, `SignInForm.tsx`, `SignUpForm.tsx`, `GoogleAuthButton.tsx`, and `ResetPasswordForm.tsx` to use Firebase Auth
+  - Migrated `src/services/db.ts` to Cloud Firestore (`users`, `books`, `read_lists`, `read_list_books`, `invitations`) with offline caching and graceful local IndexedDB fallback
+  - Enhanced `SignInForm.tsx` and `SignUpForm.tsx` with friendly Firebase error translation and 1-click "Explore Demo Collection (Offline-Ready)" mode
   - Verified clean TypeScript compilation (`npx tsc --noEmit`) and successful Next.js 16 production build (`npm run build`)
-  - Verified local dev server runtime at `http://localhost:3101`
+  - Ran automated end-to-end browser testing verifying landing page, demo auth, dashboard, book creation, archival card slide-over, navigation tabs, dark mode toggle, sign-out, and `/dashboard` route protection
 
 ## In Progress
 
@@ -30,7 +30,9 @@
 
 ## Next Up
 
-- User testing of Firebase Auth (Email/Password & Google) and Firestore database collections.
+- Enable Email/Password in Firebase Console (Authentication > Sign-in method) for live cloud accounts.
+- Remove obsolete `src/app/sso-callback` directory.
+- Feature enhancements: Google Books API lookup for ISBN/Title autofill, book cover upload, or reading stats.
 
 ## Architecture Decisions
 

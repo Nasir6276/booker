@@ -27,6 +27,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
+  signInAsDemo: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -100,9 +101,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           useBookerStore.setState({ user: null, loading: false });
         }
       } else {
-        setUser(null);
-        useBookerStore.setState({ user: null, loading: false });
-        document.cookie = 'booker_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        // If Firebase auth has no active user, check if a local demo session exists
+        const localUser = await authService.getCurrentUser();
+        if (localUser) {
+          setUser(localUser);
+          useBookerStore.setState({ user: localUser, loading: false });
+          document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(localUser))}; path=/; max-age=2592000; SameSite=Lax`;
+          const store = useBookerStore.getState();
+          await store.fetchBooks();
+          await store.fetchReadLists();
+        } else {
+          setUser(null);
+          useBookerStore.setState({ user: null, loading: false });
+          document.cookie = 'booker_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        }
       }
       setLoading(false);
     });
@@ -156,9 +168,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await sendPasswordResetEmail(auth, email.trim());
   };
 
+  const signInAsDemo = async () => {
+    setLoading(true);
+    try {
+      const local = await authService.signIn('jean.luc@minimalist.fr');
+      setUser(local);
+      useBookerStore.setState({ user: local, loading: false });
+      document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(local))}; path=/; max-age=2592000; SameSite=Lax`;
+      await authService.initDemoData(local.id);
+      const store = useBookerStore.getState();
+      await store.fetchBooks();
+      await store.fetchReadLists();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signOut = async () => {
-    if (isConfigured) {
-      await fbSignOut(auth);
+    if (isConfigured && auth.currentUser) {
+      try {
+        await fbSignOut(auth);
+      } catch (e) {
+        console.error('Firebase signout error:', e);
+      }
     }
     await authService.signOut();
     setUser(null);
@@ -178,6 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInWithGoogle,
       sendPasswordReset,
       signOut,
+      signInAsDemo,
     }),
     [user, firebaseUser, loading, isConfigured]
   );
