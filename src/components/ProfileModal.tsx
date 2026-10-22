@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useBookerStore } from '../store/useBookerStore';
 import { X, User, Globe, Lock, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getInitials } from '../utils/initials';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -69,6 +70,24 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
           {/* Body */}
           <div className="p-6 flex flex-col gap-4">
+            {/* Live Avatar Preview */}
+            <div className="flex items-center gap-3.5 p-3 rounded-card bg-background/50 border border-border/80">
+              <div className="w-12 h-12 rounded-full border border-border bg-primary/10 text-primary dark:bg-primary/20 dark:text-accent flex items-center justify-center font-serif text-base font-bold overflow-hidden shrink-0 shadow-xs">
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                ) : (
+                  <span>{getInitials(displayName)}</span>
+                )}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-semibold truncate leading-tight">{displayName || 'Reader'}</span>
+                <span className="text-[11px] text-muted truncate mt-0.5">
+                  {avatarUrl ? 'Custom image avatar' : 'Initials-based avatar'}
+                </span>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] uppercase tracking-wider font-semibold text-muted">Display Name</label>
               <input

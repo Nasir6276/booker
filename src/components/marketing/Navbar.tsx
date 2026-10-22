@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Menu, X, Moon, Sun, BookOpen, LogOut, LayoutDashboard, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
+import { getInitials } from '../../utils/initials';
 
 export default function Navbar() {
   const { user, signOut } = useAuth();
@@ -117,7 +118,7 @@ export default function Navbar() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
                   ) : (
-                    user.display_name.charAt(0).toUpperCase()
+                    <span>{getInitials(user.display_name)}</span>
                   )}
                 </div>
                 <span className="max-w-[120px] truncate">{user.display_name}</span>

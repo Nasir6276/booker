@@ -42,14 +42,15 @@ export default function SignInForm() {
 
     try {
       await signInWithEmail(data.identifier, data.password);
-      window.location.href = '/dashboard';
+      const redirectTarget = typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('redirect') || '/dashboard') : '/dashboard';
+      window.location.href = redirectTarget;
     } catch (err: unknown) {
       console.error('Sign in error:', err);
       const code = (err as { code?: string })?.code;
       let msg = 'Failed to sign in. Please check your credentials.';
 
       if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
-        msg = 'Invalid email or password.';
+        msg = 'Invalid email or password. If you do not have an account yet, click "Sign up" below or use the Demo Collection.';
       } else if (code === 'auth/too-many-requests') {
         msg = 'Too many attempts. Please wait a few moments and try again.';
       } else if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {

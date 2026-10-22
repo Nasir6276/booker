@@ -12,13 +12,14 @@ import {
   Plus
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getInitials as getUserInitials } from '../utils/initials';
 
 interface DashboardViewProps {
   onOpenAddModal: () => void;
 }
 
 export default function DashboardView({ onOpenAddModal }: DashboardViewProps) {
-  const { books, setActiveTab, setSelectedBookId } = useBookerStore();
+  const { user, books, setActiveTab, setSelectedBookId } = useBookerStore();
   
   const activeBooks = books.filter(b => !b.is_deleted);
   
@@ -62,15 +63,27 @@ export default function DashboardView({ onOpenAddModal }: DashboardViewProps) {
   return (
     <div className="flex flex-col gap-8">
       {/* Welcome Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-3xl md:text-4xl italic font-semibold text-primary">Le Cabinet</h2>
-          <p className="text-muted text-sm mt-1">A curated look at your library collection</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-full border border-border bg-primary/10 text-primary dark:bg-primary/20 dark:text-accent flex items-center justify-center font-serif text-base font-bold overflow-hidden shadow-xs shrink-0">
+            {user?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
+            ) : (
+              <span>{getUserInitials(user?.display_name)}</span>
+            )}
+          </div>
+          <div>
+            <h2 className="font-serif text-2xl md:text-3xl italic font-semibold text-primary">
+              Welcome back, {user?.display_name || 'Reader'}
+            </h2>
+            <p className="text-muted text-xs md:text-sm mt-0.5">Le Cabinet — A curated look at your library collection</p>
+          </div>
         </div>
         
         <button
           onClick={onOpenAddModal}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/95 text-white py-2.5 px-4 rounded-full text-sm font-semibold shadow-sm hover:shadow transition-all group duration-200"
+          className="flex items-center gap-2 bg-primary hover:bg-primary/95 text-white py-2.5 px-4 rounded-full text-sm font-semibold shadow-sm hover:shadow transition-all group duration-200 self-start sm:self-auto cursor-pointer"
         >
           <Plus size={16} className="group-hover:rotate-90 transition-transform duration-200" />
           <span>Add a Book</span>

@@ -61,7 +61,8 @@ export default function SignUpForm() {
     try {
       const displayName = data.username || data.email.split('@')[0];
       await signUpWithEmail(data.email, data.password, displayName);
-      window.location.href = '/dashboard';
+      const redirectTarget = typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('redirect') || '/dashboard') : '/dashboard';
+      window.location.href = redirectTarget;
     } catch (err: unknown) {
       console.error('Sign up error:', err);
       const code = (err as { code?: string })?.code;

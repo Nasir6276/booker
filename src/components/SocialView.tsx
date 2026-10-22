@@ -16,6 +16,7 @@ import {
   Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getInitials as getUserInitials } from '../utils/initials';
 
 export default function SocialView() {
   const { user, updateProfile } = useBookerStore();
@@ -184,6 +185,24 @@ export default function SocialView() {
         <div className="bg-surface border border-border p-6 rounded-card shadow-sm">
           <h3 className="font-serif text-xl font-bold mb-4">My Cabinet Profile</h3>
           
+          {/* Avatar Preview */}
+          <div className="flex items-center gap-3.5 p-3 rounded-card bg-background/50 border border-border/80 mb-4">
+            <div className="w-12 h-12 rounded-full border border-border bg-primary/10 text-primary dark:bg-primary/20 dark:text-accent flex items-center justify-center font-serif text-base font-bold overflow-hidden shrink-0 shadow-xs">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+              ) : (
+                <span>{getUserInitials(displayName)}</span>
+              )}
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold truncate leading-tight">{displayName || 'Reader'}</span>
+              <span className="text-[11px] text-muted truncate mt-0.5">
+                {avatarUrl ? 'Custom photo' : 'Initials avatar'}
+              </span>
+            </div>
+          </div>
+
           <form onSubmit={handleUpdateProfile} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] uppercase tracking-wider font-semibold text-muted">Display Name</label>
@@ -358,12 +377,12 @@ export default function SocialView() {
             >
               {/* Friend profile details */}
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full border border-border overflow-hidden shrink-0 bg-background">
+                <div className="w-10 h-10 rounded-full border border-border bg-primary/10 text-primary dark:bg-primary/20 dark:text-accent flex items-center justify-center font-serif text-sm font-bold overflow-hidden shrink-0">
                   {searchedUser.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={searchedUser.avatar_url} alt={searchedUser.display_name} className="w-full h-full object-cover" />
                   ) : (
-                    <UserPlus className="w-full h-full p-2 text-muted" />
+                    <span>{getUserInitials(searchedUser.display_name)}</span>
                   )}
                 </div>
                 <div>

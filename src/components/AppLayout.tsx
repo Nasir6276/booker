@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ProfileModal from './ProfileModal';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
+import { getInitials } from '../utils/initials';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -145,13 +146,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="relative">
             <button 
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="flex items-center justify-center w-8 h-8 rounded-full border border-border bg-background overflow-hidden hover:opacity-90"
+              className="flex items-center justify-center w-8 h-8 rounded-full border border-border bg-primary/10 text-primary dark:bg-primary/20 dark:text-accent font-serif text-xs font-bold overflow-hidden hover:opacity-90 transition-opacity"
             >
               {user.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
               ) : (
-                <UserIcon size={16} className="text-muted" />
+                <span>{getInitials(user.display_name)}</span>
               )}
             </button>
             {showProfileMenu && (
@@ -221,12 +222,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-3 px-2 cursor-pointer hover:bg-background/50 rounded-card p-2 transition-all"
             title="Edit Profile Settings"
           >
-            <div className="w-10 h-10 rounded-full border border-border bg-background overflow-hidden relative shrink-0">
+            <div className="w-10 h-10 rounded-full border border-border bg-primary/10 text-primary dark:bg-primary/20 dark:text-accent flex items-center justify-center font-serif text-sm font-bold overflow-hidden relative shrink-0">
               {user.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
               ) : (
-                <UserIcon className="w-full h-full p-2 text-muted" />
+                <span>{getInitials(user.display_name)}</span>
               )}
             </div>
             <div className="flex flex-col min-w-0 flex-1">

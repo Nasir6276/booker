@@ -60,45 +60,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
+        let appUser: User = {
+          id: fbUser.uid,
+          email: fbUser.email || '',
+          display_name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Reader',
+          avatar_url: fbUser.photoURL || undefined,
+          invite_code: `${(fbUser.displayName || fbUser.email || 'BKR').slice(0, 3).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${new Date().getFullYear()}`,
+          is_public: false,
+          created_at: new Date().toISOString(),
+        };
+
         try {
           const userRef = doc(db, 'users', fbUser.uid);
           const snap = await getDoc(userRef);
 
-          let appUser: User;
           if (snap.exists()) {
             appUser = snap.data() as User;
           } else {
-            const rawName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Reader';
-            const cleanPrefix = rawName.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase() || 'BKR';
-            const inviteCode = `${cleanPrefix}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${new Date().getFullYear()}`;
-
-            appUser = {
-              id: fbUser.uid,
-              email: fbUser.email || '',
-              display_name: rawName,
-              avatar_url: fbUser.photoURL || undefined,
-              invite_code: inviteCode,
-              is_public: false,
-              created_at: new Date().toISOString(),
-            };
-
             await setDoc(userRef, appUser);
             // Initialize sample demo collection for new users
             await authService.initDemoData(fbUser.uid);
           }
+        } catch (err) {
+          console.warn('Firestore user doc sync error (continuing with auth session):', err);
+        }
 
-          setUser(appUser);
-          useBookerStore.setState({ user: appUser, loading: false });
-          document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(appUser))}; path=/; max-age=2592000; SameSite=Lax`;
+        setUser(appUser);
+        useBookerStore.setState({ user: appUser, loading: false });
+        document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(appUser))}; path=/; max-age=2592000; SameSite=Lax`;
 
-          // Load books and lists for the user
+        // Load books and lists for the user in background
+        try {
           const store = useBookerStore.getState();
           await store.fetchBooks();
           await store.fetchReadLists();
-        } catch (err) {
-          console.error('Error fetching/syncing Firebase user document:', err);
-          setUser(null);
-          useBookerStore.setState({ user: null, loading: false });
+        } catch (e) {
+          console.warn('Initial books fetch error:', e);
         }
       } else {
         // If Firebase auth has no active user, check if a local demo session exists
@@ -126,24 +123,113 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isConfigured) {
       const local = await authService.signIn(email);
       setUser(local);
-      useBookerStore.setState({ user: local });
+      useBookerStore.setState({ user: local, loading: false });
       document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(local))}; path=/; max-age=2592000; SameSite=Lax`;
+      await authService.initDemoData(local.id);
+      const store = useBookerStore.getState();
+      await store.fetchBooks();
+      await store.fetchReadLists();
       return;
     }
-    await signInWithEmailAndPassword(auth, email.trim(), password);
+
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const fbUser = cred.user;
+      const rawName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Reader';
+      const cleanPrefix = rawName.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase() || 'BKR';
+      const inviteCode = `${cleanPrefix}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${new Date().getFullYear()}`;
+
+      const appUser: User = {
+        id: fbUser.uid,
+        email: fbUser.email || '',
+        display_name: rawName,
+        avatar_url: fbUser.photoURL || undefined,
+        invite_code: inviteCode,
+        is_public: false,
+        created_at: new Date().toISOString(),
+      };
+
+      document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(appUser))}; path=/; max-age=2592000; SameSite=Lax`;
+      setUser(appUser);
+      useBookerStore.setState({ user: appUser, loading: false });
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      // If Firebase Auth is not configured/enabled in the Firebase console, seamlessly fall back to local account
+      if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {
+        console.warn('Firebase Auth provider not enabled in console, using local session:', code);
+        const local = await authService.signIn(email);
+        setUser(local);
+        useBookerStore.setState({ user: local, loading: false });
+        document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(local))}; path=/; max-age=2592000; SameSite=Lax`;
+        await authService.initDemoData(local.id);
+        const store = useBookerStore.getState();
+        await store.fetchBooks();
+        await store.fetchReadLists();
+        return;
+      }
+      throw err;
+    }
   };
 
   const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
     if (!isConfigured) {
       const local = await authService.signUp(email, displayName || email.split('@')[0]);
       setUser(local);
-      useBookerStore.setState({ user: local });
+      useBookerStore.setState({ user: local, loading: false });
       document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(local))}; path=/; max-age=2592000; SameSite=Lax`;
+      await authService.initDemoData(local.id);
+      const store = useBookerStore.getState();
+      await store.fetchBooks();
+      await store.fetchReadLists();
       return;
     }
-    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-    if (displayName && cred.user) {
-      await updateProfile(cred.user, { displayName });
+
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const fbUser = cred.user;
+      if (displayName) {
+        await updateProfile(fbUser, { displayName }).catch(() => {});
+      }
+      const rawName = displayName || fbUser.displayName || fbUser.email?.split('@')[0] || 'Reader';
+      const cleanPrefix = rawName.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase() || 'BKR';
+      const inviteCode = `${cleanPrefix}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${new Date().getFullYear()}`;
+
+      const appUser: User = {
+        id: fbUser.uid,
+        email: fbUser.email || '',
+        display_name: rawName,
+        avatar_url: fbUser.photoURL || undefined,
+        invite_code: inviteCode,
+        is_public: false,
+        created_at: new Date().toISOString(),
+      };
+
+      document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(appUser))}; path=/; max-age=2592000; SameSite=Lax`;
+      setUser(appUser);
+      useBookerStore.setState({ user: appUser, loading: false });
+
+      // Save user doc to Firestore in background
+      try {
+        await setDoc(doc(db, 'users', fbUser.uid), appUser, { merge: true });
+        await authService.initDemoData(fbUser.uid);
+      } catch (e) {
+        console.warn('Firestore doc save error in background:', e);
+      }
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {
+        console.warn('Firebase Auth provider not enabled in console, using local account:', code);
+        const local = await authService.signUp(email, displayName || email.split('@')[0]);
+        setUser(local);
+        useBookerStore.setState({ user: local, loading: false });
+        document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(local))}; path=/; max-age=2592000; SameSite=Lax`;
+        await authService.initDemoData(local.id);
+        const store = useBookerStore.getState();
+        await store.fetchBooks();
+        await store.fetchReadLists();
+        return;
+      }
+      throw err;
     }
   };
 
@@ -153,12 +239,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (inputEmail) {
         const local = await authService.signIn(inputEmail.trim());
         setUser(local);
-        useBookerStore.setState({ user: local });
+        useBookerStore.setState({ user: local, loading: false });
         document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(local))}; path=/; max-age=2592000; SameSite=Lax`;
+        await authService.initDemoData(local.id);
+        const store = useBookerStore.getState();
+        await store.fetchBooks();
+        await store.fetchReadLists();
       }
       return;
     }
-    await signInWithPopup(auth, googleProvider);
+
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      const fbUser = cred.user;
+      const rawName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Reader';
+      const cleanPrefix = rawName.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase() || 'BKR';
+      const inviteCode = `${cleanPrefix}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${new Date().getFullYear()}`;
+
+      const appUser: User = {
+        id: fbUser.uid,
+        email: fbUser.email || '',
+        display_name: rawName,
+        avatar_url: fbUser.photoURL || undefined,
+        invite_code: inviteCode,
+        is_public: false,
+        created_at: new Date().toISOString(),
+      };
+
+      document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(appUser))}; path=/; max-age=2592000; SameSite=Lax`;
+      setUser(appUser);
+      useBookerStore.setState({ user: appUser, loading: false });
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {
+        const local = await authService.signIn('google.user@example.com');
+        setUser(local);
+        useBookerStore.setState({ user: local, loading: false });
+        document.cookie = `booker_session=${encodeURIComponent(JSON.stringify(local))}; path=/; max-age=2592000; SameSite=Lax`;
+        await authService.initDemoData(local.id);
+        const store = useBookerStore.getState();
+        await store.fetchBooks();
+        await store.fetchReadLists();
+        return;
+      }
+      throw err;
+    }
   };
 
   const sendPasswordReset = async (email: string) => {
